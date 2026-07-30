@@ -1,0 +1,29 @@
+
+
+--- Σύνοψη ανά Κατηγορία Προϊόντων ---
+        Quantity  Net_Sales
+Region                     
+East           9     2020.0
+North         34     2186.2
+South          5     1342.0
+West          27     1443.0
+--- Σύνοψη ανά Κατηγορία Προϊόντων ---
+                 Unit_Price  Gross_Revenue
+Category                                  
+Electronics           14100          40600
+Furniture              6990          14080
+Office Supplies         287           3249
+--- Σύνοψη ανά Κατηγορία Προϊόντων ---
+        Quantity  Unit_Price
+Region                      
+East           9        1380
+North         34         913
+South          5         930
+West          27         620
+--- Σύνοψη ανά Κατηγορία Προϊόντων ---
+        Quantity
+Region          
+East           9
+North         34
+South          5
+West          27
