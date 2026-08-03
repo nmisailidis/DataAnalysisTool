@@ -94,11 +94,6 @@ DataAnalysisTool/
 ├── Report.txt
 ├── dataAnalysis.spec
 │
-├── build/
-│   └── dataAnalysis/
-│
-├── dist/
-│
 └── README.md
 ```
 
