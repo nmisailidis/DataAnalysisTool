@@ -485,11 +485,6 @@ The current version provides the core workflow for importing Excel data, perform
 
 Further development can extend the application toward a more complete desktop data-analysis platform.
 
-## License
-
-Please add the appropriate license file to this repository before publishing the project for external reuse.
-
-If you intend the project to be open source, a `LICENSE` file should clearly specify the permissions and conditions under which the source code can be used.
 
 ## Author
 
