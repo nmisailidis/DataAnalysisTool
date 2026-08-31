@@ -1,0 +1,18 @@
+@'
+# PyCharm
+.idea/
+*.iml
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Generated files
+data_analysis.db
+Report.txt
+
+# Build
+build/
+dist/
+'@ | Out-File -Encoding ascii .gitignore
