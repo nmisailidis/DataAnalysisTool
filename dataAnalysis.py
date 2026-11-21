@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 import sqlite3
 import database as db
+from core import sources
 
 selected_columns = []
 selected_var = []
@@ -29,7 +30,7 @@ def on_click_create_columns():
         return
 
     try:
-        data = pd.read_excel(source)
+        data = sources.load_excel(source)
 
         category_summary = data.groupby(selected)[selected_columns].sum()
 
@@ -50,18 +51,10 @@ def on_click_analysis():
 
     global source, columns, selected_var, list_of_columns
 
-    if source_entry.get().strip().startswith("https"):
-        source = source_entry.get()
-        source_list = source.split("/")
-        source_list[-1] = "export?format=xlsx"
-        delimeter = "/"
-        source = delimeter.join(source_list)
-        print(source)
-    else:
-        source = source_entry.get()
+    source = source_entry.get()
 
     try:
-        data = pd.read_excel(source)
+        data = sources.load_excel(source)
         list_of_columns = list(data.columns)
         conn = sqlite3.connect("data_analysis.db")
         db.init_db()
