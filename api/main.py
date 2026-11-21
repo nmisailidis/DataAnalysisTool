@@ -6,6 +6,7 @@ from fastapi import FastAPI, Depends
 import database as db
 from pydantic import BaseModel
 import pandas as pd
+from core import report
 
 
 app = FastAPI()
@@ -15,6 +16,11 @@ class DatasetCreated(BaseModel):
     id: int
     columns: list[str]
     rows: int
+
+
+class ReportRequest(BaseModel):
+    group_by: str
+    columns: list[str]
 
 
 @app.get("/health")
@@ -68,3 +74,24 @@ def create_dataset_from_file(file: UploadFile, conn=Depends(get_db)):
 
     dataset_id = db.save_dataset(conn, file.filename, "upload", data)
     return {"id": dataset_id, "columns": [str(column) for column in data.columns], "rows": len(data)}
+
+
+@app.post("/datasets/{dataset_id}/report")
+def generate_report(request: ReportRequest, dataset_id: int, conn=Depends(get_db)):
+    records = db.get_records_for_dataset(conn, dataset_id)
+
+    if not records:
+        raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
+
+    data = pd.DataFrame(records)
+
+    try:
+        category_summary = report.build_report(data, request.group_by, request.columns)
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=f"Could not build the report: {e}")
+
+    return category_summary.reset_index().to_dict(orient="records")
+
+
+
+
