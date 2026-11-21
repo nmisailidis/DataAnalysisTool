@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 import sqlite3
 import database as db
-from core import sources
+from core import sources, report
 
 selected_columns = []
 selected_var = []
@@ -30,19 +30,12 @@ def on_click_create_columns():
         return
 
     try:
+
         data = sources.load_excel(source)
+        category_summary = report.build_report(data, selected, selected_columns)
+        report.save_report(category_summary)
 
-        category_summary = data.groupby(selected)[selected_columns].sum()
-
-        try:
-            f = open("Report.txt", "x")
-        except FileExistsError:
-            with open("Report.txt", "a") as f:
-                f.write("\n--- Σύνοψη ανά Κατηγορία Προϊόντων ---\n")
-                f.write(str(category_summary))
-
-            with open("Report.txt") as f:
-                print(f.read())
+        status_label.config(text="✅ Report saved to Report.txt", foreground="#16a34a")
     except Exception as e:
         status_label.config(text=f"❌ Error generating report: {e}", foreground="#dc2626")
 
@@ -66,7 +59,8 @@ def on_click_analysis():
     status_label.config(text="Excel loaded successfully. Setup your criteria below.", foreground="#4b5563")
 
     for widget in root.winfo_children():
-        widget.destroy()
+        if widget is not top_frame:
+            widget.destroy()
 
     pick_criteria_label = ttk.Label(
         root,
