@@ -21,6 +21,7 @@ def on_click_create_columns():
 
     selected = list_of_columns[selected_index]
 
+    selected_columns = []
     for i in range(len(selected_var)):
         if selected_var[i].get() == 1:
             selected_columns.append(list_of_columns[i])
@@ -31,7 +32,7 @@ def on_click_create_columns():
 
     try:
 
-        data = sources.load_excel(source)
+        data, source_type = sources.load_excel(source)
         category_summary = report.build_report(data, selected, selected_columns)
         report.save_report(category_summary)
 
@@ -47,11 +48,11 @@ def on_click_analysis():
     source = source_entry.get()
 
     try:
-        data = sources.load_excel(source)
+        data, source_type = sources.load_excel(source)
         list_of_columns = list(data.columns)
         conn = sqlite3.connect("data_analysis.db")
         db.init_db()
-        db.save_dataset(conn, source, "local", data)
+        db.save_dataset(conn, source, source_type, data)
     except Exception as e:
         status_label.config(text=f"❌ Error reading file: {e}", foreground="#dc2626")
         return
