@@ -4,12 +4,17 @@ from fastapi import UploadFile
 from core import sources
 from fastapi import FastAPI, Depends
 import database as db
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 import pandas as pd
 from core import report
+from api.llm import question_to_plan
 
 
 app = FastAPI()
+
+
+class SourceRequest(BaseModel):
+    source: str
 
 
 class DatasetCreated(BaseModel):
@@ -23,13 +28,13 @@ class ReportRequest(BaseModel):
     columns: list[str]
 
 
+class AskRequest(BaseModel):
+    question: str
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
-
-class SourceRequest(BaseModel):
-    source: str
 
 
 def get_db():
@@ -93,5 +98,34 @@ def generate_report(request: ReportRequest, dataset_id: int, conn=Depends(get_db
     return category_summary.reset_index().to_dict(orient="records")
 
 
+@app.post("/datasets/{dataset_id}/ask")
+def question_to_llm(dataset_id: int, request: AskRequest, conn=Depends(get_db)):
+    records = db.get_records_for_dataset(conn, dataset_id)
 
+    if not records:
+        raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
+
+    data = pd.DataFrame(records)
+    columns = data.columns
+
+    numeric_columns = []
+
+    for i in columns:
+        if pd.api.types.is_numeric_dtype(data[i]):
+            numeric_columns.append(i)
+
+    answer = question_to_plan(request.question, columns, numeric_columns)
+
+    try:
+        plan = ReportRequest.model_validate_json(answer)
+    except ValidationError as e:
+        raise HTTPException(status_code=502, detail=f"The AI returned an invalid plan: {e}")
+
+    plan.columns = [column for column in plan.columns if column in numeric_columns]
+    if not plan.columns:
+        raise HTTPException(status_code=400, detail="The question didn't match any number columns. Try rephrasing it.")
+
+    result = generate_report(plan, dataset_id, conn)
+
+    return {"plan": plan, "result": result}
 
