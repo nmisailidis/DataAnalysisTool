@@ -1,3 +1,5 @@
+import json
+
 from openai import OpenAI
 
 client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
@@ -22,6 +24,28 @@ def question_to_plan(question: str, columns: list[str], numeric_columns: list[st
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": question},
         ],
+    )
+
+    return response.choices[0].message.content
+
+
+def write_summary(facts: str) -> str:
+    system_prompt = (
+        "You are a data analyst writing for a busy manager.\n"
+        "Write a short summary of a spreadsheet in 3 to 5 sentences, based only on the facts given.\n"
+        "Copy numbers exactly as they appear in the facts. Never calculate, convert or invent numbers.\n"
+        "Do not add currency symbols or units that are not in the facts.\n"
+        "For prices and percentages, mention averages, not totals."
+    )
+
+    response = client.chat.completions.create(
+        model=MODEL,
+        temperature=0.3,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": facts},
+        ],
+
     )
 
     return response.choices[0].message.content

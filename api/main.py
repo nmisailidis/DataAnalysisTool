@@ -1,14 +1,13 @@
 import sqlite3
 from fastapi import HTTPException
 from fastapi import UploadFile
-from core import sources
+from core import sources, summary
 from fastapi import FastAPI, Depends
 import database as db
 from pydantic import BaseModel, ValidationError
 import pandas as pd
 from core import report
-from api.llm import question_to_plan
-
+from api.llm import question_to_plan, write_summary
 
 app = FastAPI()
 
@@ -129,3 +128,17 @@ def question_to_llm(dataset_id: int, request: AskRequest, conn=Depends(get_db)):
 
     return {"plan": plan, "result": result}
 
+
+@app.get("/datasets/{dataset_id}/summary")
+def summarize(dataset_id: int, conn=Depends(get_db)):
+    records = db.get_records_for_dataset(conn, dataset_id)
+    if not records:
+        raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
+    data = pd.DataFrame(records)
+
+    stats = summary.compute_stats(data)
+    text = write_summary(summary.stats_to_lines(stats))
+
+    if summary.numbers_are_valid(text, stats):
+        return {"stats": stats, "summary": text, "ai-generated": True}
+    return {"stats": stats, "summary": summary.template_summary(stats), "ai-generated": False}
