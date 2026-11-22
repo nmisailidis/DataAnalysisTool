@@ -9,7 +9,8 @@ import pandas as pd
 from core import report
 from api.llm import question_to_plan, write_summary
 
-app = FastAPI()
+app = FastAPI(title="Data Analysis API")
+db.init_db()
 
 
 class SourceRequest(BaseModel):
