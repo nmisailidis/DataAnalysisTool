@@ -1,500 +1,149 @@
-# DataAnalysisTool
+# Data Analysis Tool
 
-A lightweight desktop application for analyzing Excel datasets through a simple graphical user interface.
+A Python tool for analysing Excel data, with a desktop app and a REST API.
+Load an Excel file or a Google Sheets link, group the data by any column and sum
+the number columns, or ask a question in plain language and let an LLM turn it
+into a report.
 
-**DataAnalysisTool** was developed in Python to make basic spreadsheet analysis more accessible without requiring users to write Python or SQL queries. The application allows users to load an Excel dataset, select a category for grouping, choose numerical columns to aggregate, generate a summary report, and review previously imported datasets through a local SQLite database.
-
-## Overview
-
-DataAnalysisTool combines a graphical interface with data-processing and database functionality to provide a simple workflow for spreadsheet analysis.
-
-The application is built around three main components:
-
-* **Graphical User Interface** — built with Tkinter and ttk
-* **Data Processing** — handled with Pandas
-* **Data Persistence** — handled with SQLite
-
-The current implementation focuses on Excel-based datasets and category-level aggregation.
+![CI](https://github.com/nmisailidis/DataAnalysisTool/actions/workflows/ci.yml/badge.svg)
 
 ## Features
 
-### 📊 Excel Data Analysis
+- Upload `.xlsx` files, or load from a local path or a Google Sheets link
+- Store datasets in SQLite and browse them and their rows
+- Group-by reports that sum the chosen number columns
+- **`/ask`:** ask a question in plain language → the LLM returns a report plan →
+  the plan is validated → the report runs
+- **`/summary`:** a short written summary of a dataset, with every number checked
+  against values computed by pandas
+- A desktop app (Tkinter) and a REST API (FastAPI) sharing the same logic
 
-Load an Excel spreadsheet from:
-
-* A local file path
-* A supported HTTPS data source
-
-After loading the spreadsheet, the application automatically reads the available column names and presents them to the user.
-
-### 🔎 Interactive Column Selection
-
-Users can select:
-
-1. A primary column to group the data by
-2. One or more columns whose numerical values should be aggregated
-
-The application then uses Pandas grouping and aggregation functionality to calculate a summary of the selected data.
-
-### 📄 Automatic Report Generation
-
-After completing the analysis, the application generates a text-based report containing the calculated category summary.
-
-The report is stored as:
+## Architecture
 
 ```text
-Report.txt
+Tkinter GUI (dataAnalysis.py) ──┐
+                                ├──> core/ (load, report, summary) ──> database.py (SQLite)
+FastAPI API (api/main.py) ──────┘
+        │
+        └──> api/llm.py ──> LLM (Ollama by default, any OpenAI-compatible API)
 ```
 
-If a report already exists, new analysis results are appended to the existing file.
+- **core/**: the business logic, with no UI code, shared by the GUI and the API
+- **database.py**: storage; each row is saved as JSON, so any spreadsheet works without a fixed schema
+- **api/llm.py**: the only place that talks to the LLM
 
-### 🗃️ Dataset History
+## How the LLM is kept under control
 
-DataAnalysisTool maintains a local history of imported datasets using SQLite.
+**`/ask`**
 
-The history window displays:
+1. The LLM receives the question and the column names. **Data rows are never sent.**
+2. It replies with a JSON plan: `{"group_by": "...", "columns": [...]}`.
+3. The plan is validated with the same Pydantic model a user sends to `/report`.
+   An invalid plan returns **502**.
+4. Columns that aren't numeric are removed in code, because small models don't always follow the prompt.
+5. The plan runs through the same report function as the manual endpoint.
+6. The response includes the plan, so the user can see how the question was understood.
 
-* Dataset filename/source
-* Source type
-* Import timestamp
+The LLM never writes or runs code; it only fills in a plan that the application checks.
 
-Users can double-click a dataset to inspect the records stored for that dataset.
+**`/summary`**
 
-### 💾 Local SQLite Storage
+pandas computes the statistics, and the LLM only writes the text. Every number in
+the text is checked against the computed values; if any number doesn't match, a
+summary built by code is returned instead, and the response says so (`"ai_generated": false`).
 
-Imported datasets are stored in:
+## Run with Docker (one command)
 
-```text
-data_analysis.db
+Requires only [Docker](https://www.docker.com/products/docker-desktop/).
+
+```powershell
+docker compose up --build
 ```
 
-The database contains separate tables for dataset metadata and individual records.
+This starts the API and an Ollama container, and downloads the `llama3.2` model
+automatically. **The first start downloads about 5 GB**; later starts take seconds.
 
-This provides a persistent history between application sessions.
+Open http://127.0.0.1:8000/docs. Wait until the Ollama logs show the model download
+has finished before using `/ask` or `/summary`.
 
-## Technology Stack
+Stop with `Ctrl+C`, then `docker compose down`.
 
-| Technology | Purpose                          |
-| ---------- | -------------------------------- |
-| Python     | Core application language        |
-| Tkinter    | Desktop graphical user interface |
-| Pandas     | Excel loading and data analysis  |
-| SQLite     | Local data persistence           |
-| JSON       | Serialization of dataset records |
-| ttk        | Styled Tkinter widgets           |
+## Run locally
 
-## Project Structure
-
-```text
-DataAnalysisTool/
-│
-├── dataAnalysis.py
-├── database.py
-├── data_analysis.db
-├── Report.txt
-├── dataAnalysis.spec
-│
-└── README.md
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 ```
 
-### `dataAnalysis.py`
+Install [Ollama](https://ollama.com/download) and run `ollama pull llama3.2`. Then:
 
-The main application file.
-
-It is responsible for:
-
-* Creating the graphical user interface
-* Accepting the dataset source
-* Loading Excel files
-* Displaying available columns
-* Handling user selections
-* Performing Pandas-based aggregation
-* Generating reports
-* Displaying dataset history
-* Displaying stored records
-
-The application interface is implemented using Tkinter and `ttk`.
-
-### `database.py`
-
-Contains the SQLite database functionality.
-
-The module provides functions for:
-
-* Initializing the database
-* Saving datasets
-* Saving dataset records
-* Retrieving dataset history
-* Retrieving records belonging to a dataset
-
-### `data_analysis.db`
-
-A local SQLite database automatically used by the application to store imported dataset metadata and records.
-
-### `Report.txt`
-
-The generated text report containing the results of the selected analysis.
-
-### `dataAnalysis.spec`
-
-PyInstaller configuration used for packaging the Python application into a standalone executable.
-
-## How It Works
-
-The application's workflow can be summarized as follows:
-
-```text
-        ┌──────────────────────┐
-        │   Select Data Source │
-        └──────────┬───────────┘
-                   │
-                   ▼
-        ┌──────────────────────┐
-        │    Load Excel Data   │
-        │       Pandas         │
-        └──────────┬───────────┘
-                   │
-                   ▼
-        ┌──────────────────────┐
-        │ Display Data Columns │
-        └──────────┬───────────┘
-                   │
-          ┌────────┴─────────┐
-          ▼                  ▼
-   Select Grouping     Select Metrics
-       Column             to Sum
-          │                  │
-          └────────┬─────────┘
-                   ▼
-        ┌──────────────────────┐
-        │  Group & Aggregate   │
-        │       Pandas         │
-        └──────────┬───────────┘
-                   │
-                   ▼
-        ┌──────────────────────┐
-        │   Generate Report    │
-        │     Report.txt       │
-        └──────────────────────┘
-
-                   +
-                   
-        ┌──────────────────────┐
-        │    SQLite History    │
-        │  data_analysis.db    │
-        └──────────────────────┘
+```powershell
+fastapi dev api/main.py      # the API, docs at http://127.0.0.1:8000/docs
+python dataAnalysis.py       # the desktop app
 ```
 
-## Installation
+## Using another LLM provider
 
-### Requirements
+The LLM is configured with environment variables, so no code changes are needed:
 
-Python 3.x is required.
+| Variable | Default |
+| --- | --- |
+| `LLM_BASE_URL` | `http://localhost:11434/v1` (local Ollama) |
+| `LLM_API_KEY` | `ollama` |
+| `LLM_MODEL` | `llama3.2` |
 
-The project uses the following Python libraries:
+For OpenAI or Azure OpenAI, set these to the provider's URL, your key and a model name.
 
-```bash
-pip install pandas openpyxl
-```
+## API endpoints
 
-Tkinter and SQLite are part of the standard Python installation on most systems. On some Linux distributions, Tkinter may need to be installed separately through the system package manager.
-
-### Clone the Repository
-
-```bash
-git clone https://github.com/nmisailidis/DataAnalysisTool.git
-cd DataAnalysisTool
-```
-
-### Install Dependencies
-
-```bash
-pip install pandas openpyxl
-```
-
-### Run the Application
-
-```bash
-python dataAnalysis.py
-```
-
-## Usage
-
-### 1. Start the application
-
-Run:
-
-```bash
-python dataAnalysis.py
-```
-
-The application opens a desktop window titled:
-
-```text
-Excel Analysis App
-```
-
-### 2. Provide a data source
-
-Enter the path to an Excel file in the source field.
-
-For example:
-
-```text
-C:/Users/username/Documents/sales.xlsx
-```
-
-The application also contains logic for HTTPS sources that can expose Excel-compatible data.
-
-### 3. Load the dataset
-
-Click:
-
-```text
-Analysis
-```
-
-The application reads the Excel file with Pandas and retrieves the available column names.
-
-The imported dataset is also saved to the local SQLite database.
-
-### 4. Select a grouping column
-
-After loading the dataset, select the main column that should be used to group the data.
-
-For example:
-
-```text
-Product Category
-```
-
-### 5. Select metrics
-
-Choose one or more columns that should be aggregated.
-
-For example:
-
-```text
-Quantity
-Revenue
-```
-
-### 6. Generate the report
-
-Click:
-
-```text
-Generate Report!
-```
-
-The application groups the dataset by the selected category and calculates the sum of the selected metrics.
-
-The resulting summary is written to:
-
-```text
-Report.txt
-```
-
-### 7. View dataset history
-
-Click:
-
-```text
-View History
-```
-
-This opens a separate window containing previously imported datasets.
-
-Double-clicking a dataset allows you to inspect its stored records.
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/health` | Health check |
+| GET | `/datasets` | List stored datasets |
+| GET | `/datasets/{dataset_id}/records` | Rows of one dataset |
+| POST | `/datasets/upload` | Upload an `.xlsx` file |
+| POST | `/datasets/from-url` | Load from a path or Google Sheets link |
+| POST | `/datasets/{dataset_id}/report` | Group-by report from chosen columns |
+| POST | `/datasets/{dataset_id}/ask` | Report from a plain-language question |
+| GET | `/datasets/{dataset_id}/summary` | Written summary with checked numbers |
 
 ## Example
 
-Suppose the input spreadsheet contains:
+`POST /datasets/1/ask`
 
-| Product | Category    | Quantity | Revenue |
-| ------- | ----------- | -------- | ------- |
-| Laptop  | Electronics | 5        | 5000    |
-| Phone   | Electronics | 10       | 7000    |
-| Desk    | Furniture   | 4        | 1200    |
-| Chair   | Furniture   | 12       | 1800    |
-
-The user can select:
-
-**Grouping column:**
-
-```text
-Category
+```json
+{"question": "What is the total quantity sold per region?"}
 ```
 
-**Metrics:**
+Response:
 
-```text
-Quantity
-Revenue
+```json
+REPLACE THIS WITH A REAL RESPONSE FROM YOUR Orders.xlsx
 ```
 
-The resulting analysis produces a category-level summary similar to:
+## Tests
 
-```text
-Category
-Electronics    Quantity: 15    Revenue: 12000
-Furniture      Quantity: 16    Revenue: 3000
+```powershell
+python -m pytest -v
 ```
 
-This summary is then written to `Report.txt`.
+The tests use a temporary database and a fake LLM, so they don't need Ollama.
+GitHub Actions runs them on every push.
 
-## Database Design
+## Tech stack
 
-The application uses SQLite to maintain a history of imported datasets.
+Python 3.12 · FastAPI · Pydantic · pandas · SQLite · Tkinter · OpenAI Python SDK ·
+Ollama · pytest · Docker · GitHub Actions
 
-### `datasets`
+## Next steps
 
-Stores information about each imported dataset.
-
-| Column            | Description               |
-| ----------------- | ------------------------- |
-| `id`              | Unique dataset identifier |
-| `source_filename` | Original dataset source   |
-| `source_type`     | Source classification     |
-| `imported_at`     | Import timestamp          |
-
-### `records`
-
-Stores individual dataset rows as JSON.
-
-| Column       | Description              |
-| ------------ | ------------------------ |
-| `id`         | Unique record identifier |
-| `dataset_id` | Associated dataset       |
-| `data_json`  | Serialized row data      |
-
-The relationship between the tables is:
-
-```text
-datasets
-   │
-   │ 1
-   │
-   │
-   │ N
-   ▼
-records
-```
-
-This allows multiple records to be associated with a single imported dataset.
-
-## Design Decisions
-
-### Why Pandas?
-
-Pandas provides a convenient and efficient API for working with tabular data. It is used to:
-
-* Read Excel spreadsheets
-* Identify columns
-* Group data
-* Calculate aggregate values
-
-### Why Tkinter?
-
-Tkinter was selected because it is included with Python and provides the functionality required to build a lightweight desktop interface without introducing a large GUI framework.
-
-### Why SQLite?
-
-SQLite provides a simple embedded database solution without requiring a separate database server.
-
-This makes it suitable for a local desktop application where dataset history needs to persist between sessions.
-
-## Error Handling
-
-The application includes user-facing error messages for common problems such as:
-
-* Invalid data sources
-* Failure to load an Excel file
-* Missing grouping selections
-* Missing metric selections
-* Report generation errors
-
-For example, the application prevents report generation when no grouping column or metric has been selected.
-
-## Packaging
-
-The repository also contains a PyInstaller specification file:
-
-```text
-dataAnalysis.spec
-```
-
-The project includes `build/` and `dist/` directories associated with application packaging.
-
-This makes it possible to distribute the application as a packaged desktop executable rather than requiring users to run the Python source directly.
-
-## Limitations
-
-The current version is intentionally focused on a straightforward Excel-analysis workflow.
-
-Current limitations include:
-
-* Excel is the primary supported data format.
-* Analysis is currently focused on grouping and summing selected columns.
-* Reports are generated as plain text.
-* The application does not currently provide graphical charts.
-* The application is designed as a local desktop application rather than a web service.
-* Database records are stored as JSON rather than being dynamically mapped to relational columns.
-
-These limitations also provide opportunities for future development.
-
-## Future Improvements
-
-Potential improvements include:
-
-* [ ] Add CSV support
-* [ ] Add interactive charts and visualizations
-* [ ] Add additional aggregation methods such as average, minimum, maximum, and count
-* [ ] Add filtering functionality
-* [ ] Add sorting options
-* [ ] Add data validation and cleaning
-* [ ] Export reports to Excel or PDF
-* [ ] Improve URL-based dataset handling
-* [ ] Add automated tests
-* [ ] Add a requirements file
-* [ ] Improve database indexing and normalization
-* [ ] Add a more advanced dashboard interface
-* [ ] Package releases for Windows, macOS, and Linux
-
-## Learning Objectives
-
-This project demonstrates practical experience with several areas of software development:
-
-* Python application development
-* Desktop GUI development
-* Data analysis with Pandas
-* Excel file processing
-* SQL/SQLite database integration
-* JSON serialization
-* Event-driven programming
-* Error handling
-* Application packaging
-
-It also demonstrates how multiple technologies can be combined to create a complete desktop data-analysis workflow.
-
-## Project Status
-
-**Status:** Functional / Development Project
-
-The current version provides the core workflow for importing Excel data, performing category-based aggregation, generating reports, and maintaining dataset history.
-
-Further development can extend the application toward a more complete desktop data-analysis platform.
-
+- Continuous deployment: build the Docker image in CI and deploy to Azure
+- Keep the API's database in a Docker volume, so data survives restarts
+- Choose the aggregation in reports (sum, average, count), not only sum
+- Handle messy number formats in Excel files (e.g. decimal commas)
+- An Angular frontend
 
 ## Author
 
-**N. Misailidis**
-
-GitHub:
-https://github.com/nmisailidis
-
-## Repository
-
-The source code is available on GitHub:
-
-https://github.com/nmisailidis/DataAnalysisTool
+Nikos Misailidis 
