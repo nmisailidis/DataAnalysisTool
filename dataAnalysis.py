@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 import sqlite3
 import database as db
+from core import sources, report
 
 selected_columns = []
 selected_var = []
@@ -20,6 +21,7 @@ def on_click_create_columns():
 
     selected = list_of_columns[selected_index]
 
+    selected_columns = []
     for i in range(len(selected_var)):
         if selected_var[i].get() == 1:
             selected_columns.append(list_of_columns[i])
@@ -29,19 +31,12 @@ def on_click_create_columns():
         return
 
     try:
-        data = pd.read_excel(source)
 
-        category_summary = data.groupby(selected)[selected_columns].sum()
+        data, source_type = sources.load_excel(source)
+        category_summary = report.build_report(data, selected, selected_columns)
+        report.save_report(category_summary)
 
-        try:
-            f = open("Report.txt", "x")
-        except FileExistsError:
-            with open("Report.txt", "a") as f:
-                f.write("\n--- Σύνοψη ανά Κατηγορία Προϊόντων ---\n")
-                f.write(str(category_summary))
-
-            with open("Report.txt") as f:
-                print(f.read())
+        status_label.config(text="✅ Report saved to Report.txt", foreground="#16a34a")
     except Exception as e:
         status_label.config(text=f"❌ Error generating report: {e}", foreground="#dc2626")
 
@@ -50,22 +45,14 @@ def on_click_analysis():
 
     global source, columns, selected_var, list_of_columns
 
-    if source_entry.get().strip().startswith("https"):
-        source = source_entry.get()
-        source_list = source.split("/")
-        source_list[-1] = "export?format=xlsx"
-        delimeter = "/"
-        source = delimeter.join(source_list)
-        print(source)
-    else:
-        source = source_entry.get()
+    source = source_entry.get()
 
     try:
-        data = pd.read_excel(source)
+        data, source_type = sources.load_excel(source)
         list_of_columns = list(data.columns)
         conn = sqlite3.connect("data_analysis.db")
         db.init_db()
-        db.save_dataset(conn, source, "local", data)
+        db.save_dataset(conn, source, source_type, data)
     except Exception as e:
         status_label.config(text=f"❌ Error reading file: {e}", foreground="#dc2626")
         return
@@ -73,7 +60,8 @@ def on_click_analysis():
     status_label.config(text="Excel loaded successfully. Setup your criteria below.", foreground="#4b5563")
 
     for widget in root.winfo_children():
-        widget.destroy()
+        if widget is not top_frame:
+            widget.destroy()
 
     pick_criteria_label = ttk.Label(
         root,
